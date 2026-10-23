@@ -25,6 +25,7 @@
 #include "MillPathSegment.h"
 
 #include "GlUtils.h"
+#include "SimulationTimeline.h"
 #include <cmath>
 #include <iostream>
 #include <numbers>
@@ -65,10 +66,23 @@ MillPathSegment::MillPathSegment(const EndMill& _endmill, const MillMotion& from
     MotionPosToVec(mDiff, to);
     vec3_sub(mDiff, mDiff, mStartPos);
     mXYDistance = sqrtf(mDiff[PX] * mDiff[PX] + mDiff[PY] * mDiff[PY]);
-    mZDistance = fabsf(mDiff[PY]);
+    mZDistance = fabsf(mDiff[PZ]);
     mXYZDistance = sqrtf(mXYDistance * mXYDistance + mDiff[PZ] * mDiff[PZ]);
     mXYAngle = atan2f(mDiff[PY], mDiff[PX]);
+    const double length = motionLength(from, to);
+    travelDuration = motionDuration(length, mXYDistance, mZDistance, to);
+    timingEstimated = travelDuration < 0;
+    if (timingEstimated) {
+        // Keep incomplete paths previewable at an explicitly estimated 1 mm/s.
+        travelDuration = length;
+    }
+    else if (travelDuration > 0) {
+        travelFeed = length * 60 / travelDuration;
+    }
     endmill = &_endmill;
+    sourceCommand = to.sourceCommand;
+    spindleDirection = to.spindleDirection;
+    rapid = to.rapid;
     mStartAngRad = mStepAngRad = 0;
     if (IsArcMotion(to)) {
         mMotionType = MTCurved;
@@ -128,7 +142,7 @@ MillPathSegment::MillPathSegment(const EndMill& _endmill, const MillMotion& from
         }
         else {
             mMotionType = MTHorizontal;
-            mShearMat[0][2] = mDiff[PZ] / mXYDistance;
+            mShearMat[0][2] = mXYDistance > 0 ? mDiff[PZ] / mXYDistance : 0;
         }
     }
 
@@ -166,7 +180,7 @@ void MillPathSegment::AppendPathPoints(std::vector<MillPathPosition>& pointsBuff
     }
 }
 
-void MillPathSegment::render(int step)
+void MillPathSegment::render(float step)
 {
     mStepNumber = step;
     mat4x4 mat, mat2, rmat;
@@ -216,25 +230,25 @@ void MillPathSegment::render(int step)
             }
             mat4x4_scale_aniso(mat2, mat2, renderDist, 1, 1);
             endmill->pathShape.Render(mat2, rmat);
-            mat4x4_translate_in_place(mat, renderDist, 0, mDiff[PZ]);
+            mat4x4_translate_in_place(mat, renderDist, 0, step * mStepLength[PZ]);
             endmill->halfToolShape.Render(mat, rmat);
         }
     }
 }
 
-void MillPathSegment::GetHeadPosition(vec3 headPos)
+void MillPathSegment::GetHeadPosition(vec3 headPos, float progress) const
 {
     if (mMotionType == MTCurved) {
-        float angRad = mStartAngRad - mStepNumber * mStepAngRad;
-        vec3_set(mHeadPos, -mRadius * sinf(angRad), mRadius * cosf(angRad), 0);
-        vec3_add(mHeadPos, mHeadPos, mCenter);
+        float angRad = mStartAngRad - progress * mArcDir * mSweepAng;
+        vec3_set(headPos, -mRadius * sinf(angRad), mRadius * cosf(angRad), 0);
+        vec3_add(headPos, headPos, mCenter);
+        headPos[PZ] = mStartPos[PZ] + progress * mDiff[PZ];
     }
     else {
-        vec3_dup(mHeadPos, mStepLength);
-        vec3_scale(mHeadPos, mHeadPos, (float)mStepNumber);
-        vec3_add(mHeadPos, mHeadPos, mStartPos);
+        vec3_dup(headPos, mDiff);
+        vec3_scale(headPos, headPos, progress);
+        vec3_add(headPos, headPos, mStartPos);
     }
-    vec3_dup(headPos, mHeadPos);
 }
 
 float MillPathSegment::SetQuality(float quality, float maxStockDimension)

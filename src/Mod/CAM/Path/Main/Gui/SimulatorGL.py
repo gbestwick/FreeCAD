@@ -27,6 +27,7 @@ Command and task window handler for the OpenGL based CAM simulator
 import math
 import os
 import FreeCAD
+import Path
 import Path.Base.Util as PathUtil
 import Path.Dressup.Utils as PathDressup
 from PathScripts import PathUtils
@@ -338,14 +339,101 @@ class CAMSimulation:
         """Activate the simulation"""
         self.SetupSimulation()
         self.millSim.ResetSimulation(FreeCADGui.getDocument(self.job.Document))
+        assembly_cache = {}
         for op in self.activeOps:
-            tool = PathDressup.toolController(op).Tool
-            toolNumber = PathDressup.toolController(op).ToolNumber
+            controller = PathDressup.toolController(op)
+            tool = controller.Tool
+            toolNumber = controller.ToolNumber
             toolProfile = self.GetToolProfile(tool, 0.5)
+            toolDescription = f"T{toolNumber} — {tool.Label} — Ø{tool.Diameter}"
+            assembly_uri = getattr(controller, "CAMToolAssemblyURI", "")
+            if assembly_uri:
+                try:
+                    if assembly_uri not in assembly_cache:
+                        from Path.Tool.camassets import cam_assets
+                        from Path.Tool.holder.assets import ToolAssembly
+
+                        assembly_cache[assembly_uri] = cam_assets.get(
+                            assembly_uri, store=["local", "builtin"], depth=None
+                        )
+                    external_assembly = assembly_cache[assembly_uri]
+                    toolbit_id = getattr(tool, "ToolBitID", "")
+                    if not isinstance(external_assembly, ToolAssembly):
+                        raise TypeError("asset is not a CAM tool assembly")
+                    if external_assembly.toolbit_id != toolbit_id:
+                        raise ValueError("assembly ToolBit does not match the controller ToolBit")
+                    holder = external_assembly.holder
+                    if holder is None:
+                        raise ValueError("holder geometry dependency is missing")
+                    datum = holder.tool_side_datum
+                    axis = datum.Rotation.multVec(Vector(0, 0, 1))
+                    tip_position = datum.Base.sub(axis.multiply(external_assembly.stick_out_mm))
+                    holder_shape = holder.shape.copy()
+                    holder_shape.translate(tip_position.multiply(-1))
+                    self.millSim.AddHolderShape(holder_shape, toolNumber, 0.5)
+                    toolDescription += " — {} — stick-out {:.2f} mm".format(
+                        holder.label, external_assembly.stick_out_mm
+                    )
+                except Exception as exc:
+                    FreeCAD.Console.PrintWarning(
+                        "CAM simulator: could not load assembly '{}' for '{}': {}\n".format(
+                            assembly_uri, controller.Label, exc
+                        )
+                    )
+            assembly = getattr(controller, "CAMToolAssembly", None)
+            if assembly_uri:
+                pass  # The external, versioned asset is authoritative.
+            elif assembly is not None:
+                assemblyTool = getattr(assembly, "ToolBit", None)
+                if assemblyTool is not None and assemblyTool != tool:
+                    FreeCAD.Console.PrintWarning(
+                        "CAM simulator: assembly '{}' references '{}', but controller '{}' uses '{}'; "
+                        "the assembly is ignored for this operation.\n".format(
+                            assembly.Label, assemblyTool.Label, controller.Label, tool.Label
+                        )
+                    )
+                else:
+                    stickOut = getattr(assembly, "StickOut", None)
+                    holder = getattr(assembly, "HolderDefinition", None)
+                    toolDatum = getattr(assembly, "ToolSideDatum", None)
+                    if holder is not None and stickOut is not None and toolDatum is not None:
+                        try:
+                            from Path.Tool.holder.assembly import (
+                                _global_placement,
+                                _preview_shapes,
+                            )
+
+                            holderShape, _ = _preview_shapes(
+                                holder, toolDatum, getattr(assembly, "ToolBody", None), stickOut.Value
+                            )
+                            holderWorld = _global_placement(holder)
+                            previewFrame = Placement(holderWorld.Base, Rotation())
+                            toolFrame = previewFrame.multiply(toolDatum.Placement)
+                            axis = toolFrame.Rotation.multVec(Vector(0, 0, 1))
+                            tipPosition = toolFrame.Base.sub(axis.multiply(stickOut.Value))
+                            holderShape.translate(tipPosition.multiply(-1))
+                            self.millSim.AddHolderShape(holderShape, toolNumber, 0.5)
+                            toolDescription += " — {} — stick-out {:.2f} mm".format(
+                                holder.Label, stickOut.Value
+                            )
+                        except Exception as exc:
+                            FreeCAD.Console.PrintWarning(
+                                "CAM simulator: could not prepare holder '{}' for '{}': {}\n".format(
+                                    holder.Label, controller.Label, exc
+                                )
+                            )
+            self.millSim.SetOperation(op.Label, toolDescription)
             self.millSim.AddTool(toolProfile, toolNumber, tool.Diameter, 1)
+            # Operations omit the tool controller's spindle setup. Reset first so
+            # a controller with its spindle disabled cannot inherit the previous RPM.
+            self.millSim.AddCommand(Path.Command("M5"))
+            for cmd in controller.Path.Commands:
+                self.millSim.AddCommand(cmd)
             opCommands = PathUtils.getPathWithPlacement(op).Commands
             for cmd in opCommands:
-                self.millSim.AddCommand(cmd)
+                self.millSim.AddCommand(
+                    cmd, controller.HorizRapid.Value, controller.VertRapid.Value
+                )
         self.millSim.BeginSimulation(self.stock, self.quality)
         if self.baseShape is not None:
             self.millSim.SetBaseShape(self.baseShape, 1)

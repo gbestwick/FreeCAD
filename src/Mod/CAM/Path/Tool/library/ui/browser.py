@@ -37,6 +37,7 @@ from ...toolbit.ui.util import natural_sort_key
 from ...toolbit.ui.browser import ToolBitBrowserWidget, ToolBitUriRole
 from ...toolbit.ui.typefilter import ToolBitTypeFilterMixin
 from ...toolbit.serializers import YamlToolBitSerializer
+from ...camassets import cam_assets
 from ..models.library import Library
 
 Path.Log.setLevel(Path.Log.Level.INFO, Path.Log.thisModule())
@@ -67,6 +68,7 @@ class LibraryBrowserWidget(ToolBitBrowserWidget, ToolBitTypeFilterMixin):
             compact=compact,
         )
         self.current_library: Optional[Library] = None
+        self._assembly_display_cache = {}
         self._selected_tool_type: Optional[str] = None
         self._show_all_tools = show_all_tools
         self.layout().setContentsMargins(0, 0, 0, 0)
@@ -171,6 +173,7 @@ class LibraryBrowserWidget(ToolBitBrowserWidget, ToolBitTypeFilterMixin):
     def refresh(self):
         """Refreshes the toolbits for the current library from disk."""
         Path.Log.debug("refresh(): Fetching and populating toolbits.")
+        self._assembly_display_cache.clear()
         if self.current_library:
             library_uri = self.current_library.get_uri()
             try:
@@ -216,6 +219,7 @@ class LibraryBrowserWidget(ToolBitBrowserWidget, ToolBitTypeFilterMixin):
     def set_current_library(self, library):
         """Sets the current library and updates the tool list."""
         self.current_library = library
+        self._assembly_display_cache.clear()
         self._reload_assets_from_library()
         self.current_library_changed.emit()
 
@@ -230,6 +234,7 @@ class LibraryBrowserWidget(ToolBitBrowserWidget, ToolBitTypeFilterMixin):
     def _on_type_filter_changed(self):
         """Called when the type filter changes - updates the list."""
         self._refresh_filtered_list(self._tool_list_widget, self._search_edit, self._all_assets)
+        self._update_assembly_rows()
 
     def _reload_assets_from_library(self):
         """Reloads assets from the current library and refreshes the UI."""
@@ -245,11 +250,65 @@ class LibraryBrowserWidget(ToolBitBrowserWidget, ToolBitTypeFilterMixin):
         if hasattr(self, "_tool_type_combo"):
             self._update_tool_type_combo()
         self._refresh_filtered_list(self._tool_list_widget, self._search_edit, self._all_assets)
+        self._update_assembly_rows()
 
     def _update_list(self):
         """Override base class to prevent search highlighting."""
         super()._update_list()
-        # Remove any highlighting by passing empty string
+        self._update_assembly_rows()
+
+    def _assembly_display(self, toolbit):
+        if not self.current_library:
+            return "", ""
+        tool_id = toolbit.get_id()
+        if tool_id in self._assembly_display_cache:
+            return self._assembly_display_cache[tool_id]
+        uri = self.current_library.get_assembly_uri_for_bit(toolbit)
+        if not uri:
+            value = ("No assembly", "No tool assembly assigned")
+        else:
+            try:
+                assembly_uri = AssetUri(uri)
+                assembly = cam_assets.get(assembly_uri, store=self._store_name, depth=0)
+                value = (
+                    "Assembly: {} (rev {})".format(assembly.label, assembly_uri.version),
+                    "Assembly: {}\nReference: {}".format(assembly.label, assembly_uri),
+                )
+            except Exception as exc:
+                value = ("MISSING ASSEMBLY", "Missing assembly reference: {}\n{}".format(uri, exc))
+        self._assembly_display_cache[tool_id] = value
+        return value
+
+    def _update_assembly_rows(self):
+        if not self.current_library:
+            return
+        tools_by_uri = {str(bit.get_uri()): bit for bit in self._all_assets}
+        for row in range(self._tool_list_widget.count()):
+            item = self._tool_list_widget.item(row)
+            toolbit = tools_by_uri.get(str(item.data(ToolBitUriRole)))
+            cell = self._tool_list_widget.itemWidget(item)
+            if toolbit is None or cell is None or not hasattr(cell, "set_upper_text"):
+                continue
+            assembly_text, tooltip = self._assembly_display(toolbit)
+            # Keep the tool name on the primary line and use the secondary
+            # line for the assembly state. Appending the state to a long tool
+            # name made it easy to clip out of view in the narrow library pane.
+            cell.set_upper_text(toolbit.label)
+            cell.set_lower_text(assembly_text)
+            full_tooltip = "{}\n\n{}\nTool: {}".format(
+                tooltip, toolbit.summary, toolbit.get_uri()
+            )
+            cell.setToolTip(full_tooltip)
+            item.setToolTip(full_tooltip)
+        self._tool_list_widget.apply_filter(self._search_edit.text())
+
+    def _matches_search(self, toolbit, search_term):
+        if super()._matches_search(toolbit, search_term):
+            return True
+        assembly_text, tooltip = self._assembly_display(toolbit)
+        query = search_term.lower()
+        searchable = (assembly_text + " " + tooltip).lower()
+        return all(term in searchable for term in query.split())
 
     def _add_shortcuts(self):
         """Adds keyboard shortcuts for common actions."""
@@ -288,6 +347,27 @@ class LibraryBrowserWidget(ToolBitBrowserWidget, ToolBitTypeFilterMixin):
         edit_action = context_menu.addAction("Edit", self._on_edit_requested)
         edit_action.setEnabled(has_selection)
 
+        if has_library and len(selected_items) == 1:
+            selected_bit = self._get_first_selected_bit()
+            assigned_assembly = (
+                self.current_library.get_assembly_uri_for_bit(selected_bit)
+                if selected_bit is not None else None
+            )
+            assembly_text = (
+                self._assembly_display(selected_bit)[0] if selected_bit is not None else ""
+            )
+            action = context_menu.addAction(
+                "Repair Missing Tool Assembly…"
+                if assigned_assembly and assembly_text == "MISSING ASSEMBLY"
+                else "Change Tool Assembly…"
+                if assigned_assembly
+                else "Assign Tool Assembly…",
+                self._on_assign_assembly_requested,
+            )
+            action.setToolTip("Save or choose the holder assembly used when this tool is added to a job")
+            if assigned_assembly:
+                context_menu.addAction("Remove Tool Assembly", self._on_remove_assembly_requested)
+
         context_menu.addSeparator()
 
         action = context_menu.addAction("Copy", self._on_copy_requested)
@@ -323,6 +403,73 @@ class LibraryBrowserWidget(ToolBitBrowserWidget, ToolBitTypeFilterMixin):
 
         # Execute the menu
         context_menu.exec_(self._tool_list_widget.mapToGlobal(position))
+
+    def _on_assign_assembly_requested(self):
+        """Save an assembly reference on this numbered library tool."""
+        library = self.current_library
+        toolbit = self._get_first_selected_bit()
+        if library is None or toolbit is None:
+            return
+        tool_no = library.get_bit_no_from_bit(toolbit)
+        if tool_no is None:
+            QtGui.QMessageBox.information(
+                self, "Tool Assembly", "Assign a tool number to this ToolBit in the library first."
+            )
+            return
+        from ...holder.assembly import ToolAssemblyLibraryDialog
+
+        dialog = ToolAssemblyLibraryDialog(
+            None, toolbit.get_id(), toolbit.label, parent=self, tool_source=toolbit
+        )
+        dialog.finished.connect(
+            lambda result, dlg=dialog, lib=library, bit=toolbit, number=tool_no:
+                self._finish_assembly_assignment(result, dlg, lib, bit, number)
+        )
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
+
+    def _finish_assembly_assignment(self, result, dialog, library, toolbit, tool_no):
+        if result != QtGui.QDialog.Accepted:
+            return
+        try:
+            uri, assembly = dialog.selected_asset()
+            if assembly is None:
+                from ...camassets import cam_assets
+                assembly = cam_assets.get(uri, store="local", depth=0)
+            if getattr(assembly, "toolbit_id", None) != toolbit.get_id():
+                raise ValueError("The assembly references a different ToolBit")
+            library.set_assembly_uri(tool_no, uri)
+            from ...camassets import cam_assets
+            cam_assets.add(library, store="local")
+            self.refresh()
+            QtGui.QMessageBox.information(
+                self, "Tool Assembly Saved",
+                "T{} in '{}' will add with '{}'. The holder stays in the CAM asset library.".format(
+                    tool_no, library.label, assembly.label
+                ),
+            )
+        except Exception as exc:
+            QtGui.QMessageBox.critical(
+                self, "Tool Assembly", "The library entry was not changed.\n\n{}".format(exc)
+            )
+
+    def _on_remove_assembly_requested(self):
+        library = self.current_library
+        toolbit = self._get_first_selected_bit()
+        if library is None or toolbit is None:
+            return
+        tool_no = library.get_bit_no_from_bit(toolbit)
+        if tool_no is None:
+            return
+        library.set_assembly_uri(tool_no, None)
+        from ...camassets import cam_assets
+        cam_assets.add(library, store="local")
+        self.refresh()
+        QtGui.QMessageBox.information(
+            self, "Tool Assembly Removed",
+            "T{} will be added to jobs without a holder assembly reference.".format(tool_no),
+        )
 
     def get_current_library(self) -> Library | None:
         """Helper to get the current library."""

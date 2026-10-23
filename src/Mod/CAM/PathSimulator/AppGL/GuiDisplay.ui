@@ -25,6 +25,48 @@
     </spacer>
    </item>
    <item>
+    <widget class="QLabel" name="motionLabel">
+     <property name="styleSheet">
+      <string notr="true">color: white; background-color: rgba(0, 0, 0, 170); border-radius: 4px; padding: 8px;</string>
+     </property>
+     <property name="wordWrap">
+      <bool>true</bool>
+     </property>
+     <property name="textFormat">
+      <enum>Qt::TextFormat::PlainText</enum>
+     </property>
+     <property name="toolTip">
+      <string>Programmed feed, spindle, and coolant settings (M7 mist, M8 flood, M9 both off). Missing rates use an estimated 60 mm/min. Time estimates cover the selected simulated toolpath at programmed speeds, independent of playback speed. Acceleration, tool-change delays, spindle spin-up, and controller-specific peck behaviour are not fully modeled.</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="collisionCheckLayout">
+     <item>
+      <widget class="QLabel" name="collisionStatusLabel">
+       <property name="styleSheet"><string notr="true">color: white; background-color: rgba(0, 0, 0, 170); padding: 4px;</string></property>
+       <property name="text"><string>Collision check</string></property>
+       <property name="visible"><bool>false</bool></property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QProgressBar" name="collisionProgressBar">
+       <property name="maximum"><number>100</number></property>
+       <property name="value"><number>0</number></property>
+       <property name="textVisible"><bool>true</bool></property>
+       <property name="visible"><bool>false</bool></property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QToolButton" name="cancelCollisionCheckButton">
+       <property name="text"><string>Cancel</string></property>
+       <property name="toolTip"><string>Cancel collision analysis</string></property>
+       <property name="visible"><bool>false</bool></property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
     <widget class="QSlider" name="stageSlider">
      <property name="orientation">
       <enum>Qt::Orientation::Horizontal</enum>
@@ -33,6 +75,20 @@
    </item>
    <item>
     <layout class="QHBoxLayout" name="horizontalLayout">
+     <item>
+      <widget class="QToolButton" name="checkCollisionsButton">
+       <property name="text"><string>Check collisions</string></property>
+       <property name="toolTip"><string>Analyze assigned tool holders against the stock. This experimental check runs after the simulator opens.</string></property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QToolButton" name="commandsButton">
+       <property name="text"><string>Commands</string></property>
+       <property name="toolTip"><string>Show or hide CAM commands</string></property>
+       <property name="checkable"><bool>true</bool></property>
+       <property name="checked"><bool>true</bool></property>
+      </widget>
+     </item>
      <item>
       <widget class="QToolButton" name="playButton">
        <property name="toolTip">

@@ -182,6 +182,8 @@ asset_mapping = {
     "toolbitshape": "Tools/Shape/{asset_id}.fcstd",
     "toolbitshapesvg": "Tools/Shape/{asset_id}",  # Asset ID has ".svg" included
     "toolbitshapepng": "Tools/Shape/{asset_id}",  # Asset ID has ".png" included
+    "toolholder": "Tools/Holder/{asset_id}/{version}.fcholder",
+    "toolassembly": "Tools/Assembly/{asset_id}/{version}.fctasm",
     "machine": "Machine/{asset_id}.fcm",
 }
 
@@ -192,6 +194,8 @@ builtin_asset_mapping = {
     "toolbitshape": "Shape/{asset_id}.fcstd",
     "toolbitshapesvg": "Shape/{asset_id}",  # Asset ID has ".svg" included
     "toolbitshapepng": "Shape/{asset_id}",  # Asset ID has ".png" included
+    "toolholder": "Holder/{asset_id}/{version}.fcholder",
+    "toolassembly": "Assembly/{asset_id}/{version}.fctasm",
     "machine": "Machine/{asset_id}.fcm",
 }
 

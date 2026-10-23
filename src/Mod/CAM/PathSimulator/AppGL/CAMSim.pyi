@@ -48,14 +48,24 @@ class CAMSim(BaseClass):
         """
         ...
 
+    def AddHolderShape(self, shape: TopoShape, toolnumber: int, resolution: float) -> None:
+        """Set render-only holder geometry for a tool number."""
+        ...
+
     def SetBaseShape(self, shape: TopoShape, resolution: float) -> None:
         """
         Set the shape of the base object of the job
         """
         ...
 
-    def AddCommand(self, command: Command, /) -> Any:
+    def SetOperation(self, operation: str, tool: str, /) -> None:
+        """Set the operation and tool labels for subsequent commands."""
+        ...
+
+    def AddCommand(
+        self, command: Command, horizontalRapid: float = -1.0, verticalRapid: float = -1.0, /
+    ) -> Any:
         """
-        Add a path command to the simulation.
+        Add a path command with optional horizontal and vertical rapid limits in mm/s.
         """
         ...

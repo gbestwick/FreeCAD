@@ -34,6 +34,8 @@ from PySide import QtGui, QtWidgets
 from ...camassets import cam_assets, ensure_assets_initialized
 from ...toolbit import ToolBit
 from .editor import LibraryEditor
+
+_modeless_selectors = []
 from .browser import LibraryBrowserWithCombo
 
 if False:
@@ -138,10 +140,8 @@ class ToolBitLibraryDock(object):
 
     def _open_editor(self):
         library = LibraryEditor(parent=FreeCADGui.getMainWindow())
+        library.form.finished.connect(lambda _result: self.browser_widget.refresh())
         library.open()
-        # After editing, we might need to refresh the libraries in the browser widget
-        # Assuming _populate_libraries is the correct method to call
-        self.browser_widget.refresh()
 
     def _conflicting_tool_controller(self, job, toolNr, toolbit: ToolBit):
         """Returns a controller of the job using a tool number for another tool."""
@@ -210,6 +210,23 @@ class ToolBitLibraryDock(object):
             toolbit.obj.ViewObject.Visibility = False
 
         tc = PathToolControllerGui.Create(f"TC: {toolbit.label}", toolbit.obj, toolNr)
+        library = self.browser_widget.get_current_library()
+        assembly_uri = library.get_assembly_uri_for_bit(toolbit) if library else None
+        if assembly_uri:
+            tc.CAMToolAssemblyURI = assembly_uri
+            try:
+                from ...camassets import cam_assets
+                from ...holder.assets import ToolAssembly
+
+                assembly = cam_assets.get(assembly_uri, depth=0)
+                if isinstance(assembly, ToolAssembly):
+                    tc.CAMToolAssemblyLabel = assembly.label
+            except Exception as exc:
+                FreeCAD.Console.PrintWarning(
+                    "CAM Tool Library: assembly reference '{}' for T{} could not be loaded: {}\n".format(
+                        assembly_uri, toolNr, exc
+                    )
+                )
         job.Proxy.addToolController(tc)
 
     def _add_tool_controller_to_doc(self):
@@ -287,4 +304,20 @@ class ToolBitLibraryDock(object):
 
     def open(self, path=None):
         """load library stored in path and bring up ui"""
-        self.form.exec_()
+        if self not in _modeless_selectors:
+            _modeless_selectors.append(self)
+            self.form.finished.connect(self._on_modeless_selector_finished)
+        self.form.setModal(False)
+        self.form.show()
+        self.form.raise_()
+        self.form.activateWindow()
+
+    def _on_modeless_selector_finished(self, _result):
+        try:
+            self.form.finished.disconnect(self._on_modeless_selector_finished)
+        except Exception:
+            pass
+        try:
+            _modeless_selectors.remove(self)
+        except ValueError:
+            pass

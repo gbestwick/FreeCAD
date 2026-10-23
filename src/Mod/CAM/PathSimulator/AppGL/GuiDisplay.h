@@ -30,6 +30,7 @@
 namespace CAMSimulator
 {
 class Ui_GuiDisplay;
+struct MillMotion;
 
 class GuiDisplay: public QWidget
 {
@@ -39,9 +40,15 @@ public:
     explicit GuiDisplay(QWidget* parent = nullptr);
     ~GuiDisplay();
 
+    void setCommandsVisible(bool visible);
+    void setIssueStatus(int count, bool paused);
+    void setCollisionCheckState(const QString& status, int progress, bool running);
+    void clearCollisionCheckState();
     void setPlaying(bool b);
     void setSpeed(int s);
     void setStage(float f, int total);
+    void setMotion(const MillMotion* motion, double travelFeed = -1, bool estimated = false);
+    void setMachiningTime(double elapsed, double total, bool assumedRates);
 
     void setStockVisible(bool b);
     void setBaseVisible(bool b);
@@ -51,6 +58,7 @@ public:
     void setBackgroundColor(const QColor& background);
 
 Q_SIGNALS:
+    void commandsVisibleChanged(bool visible);
     void play(bool b);
     void singleStep();
     void speedChanged(int s);
@@ -62,6 +70,8 @@ Q_SIGNALS:
     void rotateEnableChanged(bool b);
     void pathVisibleChanged(bool b);
     void ssaoEnableChanged(bool b);
+    void collisionCheckRequested();
+    void collisionCheckCancelRequested();
 
 protected:
     void resizeEvent(QResizeEvent* event) override;
@@ -76,7 +86,11 @@ private Q_SLOTS:
     void on_stockModelButton_clicked();
 
 private:
+    void updateInformation();
     Ui_GuiDisplay* ui;
+    QString motionText;
+    QString timeText;
+    QString issueText;
 
     bool playing = true;
     int speed = 1;

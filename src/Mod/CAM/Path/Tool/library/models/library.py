@@ -38,6 +38,8 @@ class Library(Asset):
         self._bits: List[ToolBit] = []
         self._bit_nos: Dict[int, ToolBit] = {}
         self._bit_urls: Dict[AssetUri, ToolBit] = {}
+        # Optional reusable physical setup, keyed by the library's tool number.
+        self._assembly_uris: Dict[str, str] = {}
 
     @property
     def label(self) -> str:
@@ -72,9 +74,10 @@ class Library(Asset):
         """Returns a dictionary representation of the Library in the specified format."""
         tools_list = []
         for tool_no, tool in self._bit_nos.items():
-            tools_list.append(
-                {"nr": tool_no, "path": f"{tool.get_id()}.fctb"}  # Tool ID with .fctb extension
-            )
+            entry = {"nr": tool_no, "path": f"{tool.get_id()}.fctb"}
+            if tool.get_id() in self._assembly_uris:
+                entry["assembly"] = self._assembly_uris[tool.get_id()]
+            tools_list.append(entry)
         return {"label": self.label, "tools": tools_list, "version": self.API_VERSION}
 
     @classmethod
@@ -104,6 +107,8 @@ class Library(Asset):
             bit = cast(ToolBit, dependencies.get(tool_uri))
             if bit:
                 library.add_bit(bit, bit_no=tool_no)
+                if tool_data.get("assembly"):
+                    library.set_assembly_uri(tool_no, tool_data["assembly"])
             else:
                 raise ValueError(f"Tool with id {tool_id} not found in dependencies")
         return library
@@ -126,6 +131,24 @@ class Library(Asset):
             if bit == thebit:
                 return bit_no
         return None
+
+    def set_assembly_uri(self, tool_no: int, uri: Optional[str]):
+        tool_no = int(tool_no)
+        if tool_no not in self._bit_nos:
+            raise ValueError(f"Tool number {tool_no} is not in this library")
+        tool_id = self._bit_nos[tool_no].get_id()
+        if uri:
+            self._assembly_uris[tool_id] = str(AssetUri(uri))
+        else:
+            self._assembly_uris.pop(tool_id, None)
+
+    def get_assembly_uri(self, tool_no: int) -> Optional[str]:
+        tool = self._bit_nos.get(int(tool_no))
+        return self._assembly_uris.get(tool.get_id()) if tool else None
+
+    def get_assembly_uri_for_bit(self, bit: ToolBit) -> Optional[str]:
+        tool_no = self.get_bit_no_from_bit(bit)
+        return self._assembly_uris.get(bit.get_id()) if tool_no is not None else None
 
     def get_tool_by_uri(self, uri: AssetUri) -> Optional[ToolBit]:
         for tool in self._bit_nos.values():

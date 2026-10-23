@@ -31,8 +31,12 @@ SET(CAMSimulator_SRCS_Core
     EndMill.h
     GCodeParser.cpp
     GCodeParser.h
+    HolderCollisionCheck.cpp
+    HolderCollisionCheck.h
     GlUtils.cpp
     GlUtils.h
+    CommandsPanel.cpp
+    CommandsPanel.h
     GuiDisplay.cpp
     GuiDisplay.h
     linmath.h
@@ -43,6 +47,9 @@ SET(CAMSimulator_SRCS_Core
     MillPathSegment.h
     MillSimulation.cpp
     MillSimulation.h
+    SimulationIssue.h
+    SimulationTimeline.h
+    TimeBreakdown.h
     OpenGlWrapper.cpp
     OpenGlWrapper.h
     Shader.cpp
@@ -53,6 +60,8 @@ SET(CAMSimulator_SRCS_Core
     SimShapes.h
     StockObject.cpp
     StockObject.h
+    VoxelStock.cpp
+    VoxelStock.h
     SolidObject.cpp
     SolidObject.h
     Texture.cpp

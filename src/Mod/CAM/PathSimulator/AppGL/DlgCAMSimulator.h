@@ -28,9 +28,14 @@
 # pragma warning(disable : 4251)
 #endif
 
+#include "CommandsPanel.h"
 #include <queue>
 #include <functional>
 #include <chrono>
+#include <atomic>
+#include <cstdint>
+#include <thread>
+#include <unordered_map>
 
 #include <QOpenGLWidget>
 #include <QPainter>
@@ -43,6 +48,8 @@
 #include <Mod/Part/App/TopoShape.h>
 
 class SoCamera;
+class QProgressDialog;
+namespace Mesh { class MeshObject; }
 
 namespace Gui
 {
@@ -72,6 +79,12 @@ public:
     bool needsUpdate = false;
 };
 
+struct SimHolder
+{
+    SimShape renderShape;
+    Part::TopoShape collisionShape;
+};
+
 struct SimTool
 {
 public:
@@ -92,6 +105,9 @@ public:
     ~DlgCAMSimulator() override;
 
     void connectTo(GuiDisplay& gui, Dummy3DViewer& dv);
+    void connectCommands(CommandsPanel& panel);
+    void setGuiDocument(Gui::Document* document);
+    void setOperation(const char* operation, const char* tool);
     void cloneFrom(const DlgCAMSimulator& from);
 
     static DlgCAMSimulator* instance(Gui::Document* doc = nullptr);
@@ -100,13 +116,14 @@ public:
     void startSimulation(const Part::TopoShape& stock, float quality);
     void resetSimulation();
 
-    void addGcodeCommand(const char* cmd);
+    void addGcodeCommand(const char* cmd, double horizontalRapid = -1, double verticalRapid = -1);
     void addTool(
         const std::vector<float>& toolProfilePoints,
         int toolNumber,
         float diameter,
         float resolution
     );
+    void addHolderShape(const Part::TopoShape& shape, int toolNumber, float resolution);
 
     void setStockShape(const Part::TopoShape& shape, float resolution);
     void setStockVisible(bool b);
@@ -135,18 +152,32 @@ protected:
     void updateGui();
 
 private:
+    void startHolderCollisionCheck();
+    void cancelHolderCollisionCheck();
+    void stopHolderCollisionCheck();
+    void exportSimulationReport();
+    void createVoxelStockPreview();
+    void createIntermediateVoxelStockPreview();
+    void createVoxelStockPreviewThroughCommand(int command);
+    void createStockComparison();
+    void stopVoxelStockPreview();
+
     bool mNeedsInitialize = false;
     bool mNeedsClear = false;
     bool mAnimating = false;
     int mAnimatingTimer = 0;
 
     std::unique_ptr<MillSimulation> mMillSimulator;
+    Gui::Document* mGuiDocument = nullptr;
     float mQuality = 10;
 
-    std::vector<std::string> mGCode;
+    std::vector<SimulationCommand> mGCode;
     std::size_t mLastGCode = 0;
 
     std::vector<SimTool> mTools;
+    std::unordered_map<int, SimHolder> mHolderShapes;
+    Part::TopoShape mCollisionStockShape;
+    Part::TopoShape mTargetShape;
 
     const SoCamera* mCamera = nullptr;
     SimShape mStock;
@@ -155,6 +186,20 @@ private:
     std::unique_ptr<MillSimulationState> mState;
     clock::time_point mLastProcessSim = clock::time_point::min();
 
+    int mLastPausedIssue = -1;
+    std::atomic_bool mCancelCollisionCheck {false};
+    std::thread mCollisionThread;
+    bool mCollisionCheckRunning = false;
+    std::uint64_t mCollisionGeneration = 0;
+    std::thread mVoxelStockThread;
+    std::atomic_bool mCancelVoxelStock {false};
+    bool mVoxelStockRunning = false;
+    std::uint64_t mVoxelStockGeneration = 0;
+    QProgressDialog* mVoxelStockProgress = nullptr;
+    CommandsPanel* mCommands = nullptr;
+    int mOperationId = 0;
+    std::string mOperation;
+    std::string mToolLabel;
     GuiDisplay* mGui = nullptr;
     QColor mBackground;
     Dummy3DViewer* mDummyViewer = nullptr;

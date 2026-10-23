@@ -66,8 +66,10 @@ public:
         float diameter,
         float resolution
     );
+    void AddHolderShape(const Part::TopoShape& holderShape, int toolNumber, float resolution);
     void SetBaseShape(const Part::TopoShape& baseShape, float resolution);
-    void AddCommand(Command* cmd);
+    void SetOperation(const char* operation, const char* tool);
+    void AddCommand(Command* cmd, double horizontalRapid = -1, double verticalRapid = -1);
 };
 
 }  // namespace CAMSimulator

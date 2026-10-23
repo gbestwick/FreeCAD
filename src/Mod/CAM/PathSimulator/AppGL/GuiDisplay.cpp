@@ -23,8 +23,10 @@
  ***************************************************************************/
 
 #include "GuiDisplay.h"
+#include "MillMotion.h"
 
 #include "ui_GuiDisplay.h"
+#include <algorithm>
 #include <cmath>
 #include <limits>
 
@@ -39,6 +41,10 @@ GuiDisplay::GuiDisplay(QWidget* parent)
     , ui(new Ui_GuiDisplay)
 {
     ui->setupUi(this);
+    ui->singleStepButton->setToolTip(tr("Advance to the next CAM command"));
+    connect(ui->commandsButton, &QToolButton::toggled, this, &GuiDisplay::commandsVisibleChanged);
+    setMotion(nullptr);
+    setMachiningTime(0, 0, false);
 
     playing = true;
     setPlaying(false);
@@ -49,9 +55,17 @@ GuiDisplay::GuiDisplay(QWidget* parent)
     connect(ui->slowerButton, &QToolButton::clicked, this, &GuiDisplay::onSlowerFasterButtonClicked);
     connect(ui->fasterButton, &QToolButton::clicked, this, &GuiDisplay::onSlowerFasterButtonClicked);
     connect(ui->viewAllButton, &QToolButton::clicked, this, &GuiDisplay::viewAll);
+    connect(ui->checkCollisionsButton, &QToolButton::clicked, this, &GuiDisplay::collisionCheckRequested);
+    connect(ui->cancelCollisionCheckButton, &QToolButton::clicked, this,
+            &GuiDisplay::collisionCheckCancelRequested);
     connect(ui->rotateButton, &QToolButton::toggled, this, &GuiDisplay::rotateEnableChanged);
     connect(ui->pathButton, &QToolButton::toggled, this, &GuiDisplay::pathVisibleChanged);
     connect(ui->ssaoButton, &QToolButton::toggled, this, &GuiDisplay::ssaoEnableChanged);
+}
+
+void GuiDisplay::setCommandsVisible(bool visible)
+{
+    ui->commandsButton->setChecked(visible);
 }
 
 GuiDisplay::~GuiDisplay()
@@ -133,6 +147,110 @@ void GuiDisplay::onSlowerFasterButtonClicked()
 
     setSpeed(*it);
     Q_EMIT speedChanged(*it);
+}
+
+void GuiDisplay::setMotion(const MillMotion* motion, double travelFeed, bool estimated)
+{
+    QString feed = tr("Not specified");
+    QString spindle = tr("Not specified");
+    if (motion) {
+        if (motion->rapid) {
+            feed = travelFeed >= 0
+                ? tr("%1 mm/min (rapid)").arg(locale().toString(travelFeed, 'f', 1))
+                : tr("Rapid");
+        }
+        else if (motion->feedRate >= 0) {
+            feed = tr("%1 mm/min").arg(locale().toString(motion->feedRate, 'f', 1));
+        }
+        if (motion->spindleDirection == 0) {
+            spindle = tr("Stopped");
+        }
+        else {
+            const QString direction = motion->spindleDirection > 0 ? tr("CW") : tr("CCW");
+            spindle = motion->spindleSpeed >= 0
+                ? tr("%1 RPM (%2)").arg(locale().toString(motion->spindleSpeed, 'f', 0), direction)
+                : tr("%1 (RPM not specified)").arg(direction);
+        }
+    }
+    const QString flood = motion ? (motion->floodCoolant ? tr("On") : tr("Off")) : tr("Not specified");
+    const QString mist = motion ? (motion->mistCoolant ? tr("On") : tr("Off")) : tr("Not specified");
+    QString text = tr("Feed: %1    |    Spindle: %2    |    Flood: %3    |    Mist: %4")
+                       .arg(feed, spindle, flood, mist);
+    if (estimated) {
+        text += tr("    |    Timing estimated (missing feed rate)");
+    }
+    motionText = text;
+    updateInformation();
+}
+
+static QString formatMachiningTime(double seconds)
+{
+    // Duration arithmetic rather than QTime keeps jobs longer than 24 hours intact.
+    const qint64 rounded = qRound64(std::max(0.0, seconds));
+    return QStringLiteral("%1:%2:%3")
+        .arg(rounded / 3600, 2, 10, QLatin1Char('0'))
+        .arg((rounded / 60) % 60, 2, 10, QLatin1Char('0'))
+        .arg(rounded % 60, 2, 10, QLatin1Char('0'));
+}
+
+void GuiDisplay::setMachiningTime(double elapsed, double total, bool assumedRates)
+{
+    timeText = tr("Simulated elapsed: %1    |    Estimated total: %2")
+                   .arg(formatMachiningTime(elapsed), formatMachiningTime(total));
+    if (assumedRates) {
+        timeText += tr(" (includes assumed speeds)");
+    }
+    updateInformation();
+}
+
+void GuiDisplay::setIssueStatus(int count, bool paused)
+{
+    issueText = count == 0 ? QString() : paused
+        ? tr("Paused on an issue — review Commands, then Continue or Continue without pausing (%1 issues).").arg(count)
+        : tr("%1 issues — preview/time may be incomplete or approximate. Review Commands for details.").arg(count);
+    updateInformation();
+}
+
+void GuiDisplay::setCollisionCheckState(const QString& status, int progress, bool running)
+{
+    ui->collisionStatusLabel->setText(status);
+    ui->collisionStatusLabel->setVisible(true);
+    ui->collisionProgressBar->setValue(std::clamp(progress, 0, 100));
+    ui->collisionProgressBar->setVisible(true);
+    ui->cancelCollisionCheckButton->setVisible(running);
+    ui->cancelCollisionCheckButton->setEnabled(running);
+    ui->checkCollisionsButton->setEnabled(!running);
+    ui->playButton->setEnabled(!running);
+    ui->singleStepButton->setEnabled(!running);
+    ui->stageSlider->setEnabled(!running);
+    ui->verticalLayout->activate();
+    setMask(childrenRegion());
+}
+
+void GuiDisplay::clearCollisionCheckState()
+{
+    ui->collisionStatusLabel->setVisible(false);
+    ui->collisionProgressBar->setVisible(false);
+    ui->cancelCollisionCheckButton->setVisible(false);
+    ui->checkCollisionsButton->setEnabled(true);
+    ui->playButton->setEnabled(true);
+    ui->singleStepButton->setEnabled(true);
+    ui->stageSlider->setEnabled(true);
+    ui->verticalLayout->activate();
+    setMask(childrenRegion());
+}
+
+void GuiDisplay::updateInformation()
+{
+    QString text = timeText.isEmpty() ? motionText : motionText + QLatin1Char('\n') + timeText;
+    if (!issueText.isEmpty()) text += QLatin1Char('\n') + issueText;
+    if (ui->motionLabel->text() == text) {
+        return;
+    }
+    ui->motionLabel->setText(text);
+    // The overlay uses a child-region mask to leave the 3D view interactive.
+    ui->verticalLayout->activate();
+    setMask(childrenRegion());
 }
 
 void GuiDisplay::setStage(float f, int total)

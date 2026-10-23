@@ -25,6 +25,7 @@
 #pragma once
 
 #include "MillMotion.h"
+#include "SimulationIssue.h"
 #include <vector>
 
 namespace CAMSimulator
@@ -47,11 +48,13 @@ public:
     void Clear();
 
     bool Parse(const char* filename);
-    bool AddLine(const char* ptr);
+    bool AddLine(const char* ptr, double horizontalRapid = -1, double verticalRapid = -1);
 
 public:
     std::vector<MillMotion> Operations;
     MillMotion lastState;
+    std::vector<MillMotion> CommandStates;
+    std::vector<SimulationIssue> Issues;
 
 protected:
     const char* GetNextToken(const char* ptr, GCToken* token);
@@ -59,6 +62,7 @@ protected:
     const char* ParseFloat(const char* ptr, float* retFloat);
     bool ParseLine(const char* ptr);
     int lastTool = -1;
+    bool absoluteDistanceMode = true;
 };
 
 }  // namespace CAMSimulator

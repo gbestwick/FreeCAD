@@ -1,3 +1,9 @@
 add_executable(CAM_tests_run
     Path.cpp
+    GCodeParser.cpp
+    SimulationTimeline.cpp
+    HolderCollisionCheck.cpp
+    VoxelStock.cpp
+    ${PROJECT_SOURCE_DIR}/src/Mod/CAM/PathSimulator/AppGL/GCodeParser.cpp
+    ${PROJECT_SOURCE_DIR}/src/Mod/CAM/PathSimulator/AppGL/VoxelStock.cpp
 )

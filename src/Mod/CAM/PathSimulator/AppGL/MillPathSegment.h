@@ -53,9 +53,10 @@ public:
     virtual ~MillPathSegment();
 
     virtual void AppendPathPoints(std::vector<MillPathPosition>& pointsBuffer);
-    virtual void render(int substep);
-    virtual void GetHeadPosition(vec3 headPos);
+    virtual void render(float substep);
+    virtual void GetHeadPosition(vec3 headPos, float progress) const;
     static float SetQuality(float quality, float maxStockDimension);  // 1 minimum, 10 maximum
+    static float SamplingResolution() { return mResolution; }
 
 public:
     const EndMill* endmill = nullptr;
@@ -63,6 +64,12 @@ public:
     int numSimSteps;
     int indexInArray = -1;
     int segmentIndex = -1;
+    int sourceCommand = -1;
+    int spindleDirection = 0;
+    bool rapid = false;
+    double travelDuration = 0;
+    double travelFeed = -1;
+    bool timingEstimated = false;
 
 protected:
     mat4x4 mShearMat;
@@ -78,7 +85,7 @@ protected:
     float mRadius = 0;
     float mArcDir = 0;
     bool mSmallRad = false;
-    int mStepNumber = 0;
+    float mStepNumber = 0;
 
     static float mSmallRadStep;
     static float mResolution;
@@ -87,7 +94,6 @@ protected:
     vec3 mStepLength = {0};
     vec3 mCenter = {0};
     vec3 mStartPos;
-    vec3 mHeadPos = {0};
     MotionType mMotionType;
 };
 

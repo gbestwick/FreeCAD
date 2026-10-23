@@ -56,6 +56,11 @@ void CAMSim::addTool(
     DlgCAMSimulator::instance()->addTool(toolProfilePoints, toolNumber, diameter, resolution);
 }
 
+void CAMSim::AddHolderShape(const Part::TopoShape& holderShape, int toolNumber, float resolution)
+{
+    DlgCAMSimulator::instance()->addHolderShape(holderShape, toolNumber, resolution);
+}
+
 void CAMSim::SetBaseShape(const Part::TopoShape& baseShape, float resolution)
 {
     if (baseShape.isNull()) {
@@ -65,10 +70,32 @@ void CAMSim::SetBaseShape(const Part::TopoShape& baseShape, float resolution)
     DlgCAMSimulator::instance()->setBaseShape(baseShape, resolution);
 }
 
-void CAMSim::AddCommand(Command* cmd)
+void CAMSim::SetOperation(const char* operation, const char* tool)
 {
-    std::string gline = cmd->toGCode();
-    DlgCAMSimulator::instance()->addGcodeCommand(gline.c_str());
+    DlgCAMSimulator::instance()->setOperation(operation, tool);
+}
+
+void CAMSim::AddCommand(Command* cmd, double horizontalRapid, double verticalRapid)
+{
+    // Path commands use mm/s internally; the simulator parses G-code feeds in mm/min.
+    Command simulationCommand(*cmd);
+    auto feed = simulationCommand.Parameters.find("F");
+    if (feed != simulationCommand.Parameters.end()) {
+        feed->second *= 60.0;
+    }
+    std::string gline = simulationCommand.toGCode();
+    // The CAM drilling operation keeps G98/G99 as metadata on its canned-cycle
+    // command. Feed that modal return mode to the simulator parser without
+    // adding a synthetic source line to the command sidebar.
+    if (simulationCommand.hasAnnotation("RetractMode")) {
+        const std::string mode = simulationCommand.getAnnotationString("RetractMode");
+        if (mode == "G98" || mode == "G99") {
+            gline = mode + " " + gline;
+        }
+    }
+    DlgCAMSimulator::instance()->addGcodeCommand(
+        gline.c_str(), horizontalRapid * 60, verticalRapid * 60
+    );
 }
 
 }  // namespace CAMSimulator

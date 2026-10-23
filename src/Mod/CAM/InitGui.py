@@ -90,6 +90,8 @@ class CAMWorkbench(Workbench):
         from Path.Main.Gui import JobCmd as PathJobCmd
         from Path.Main.Gui import WorkplaneCmd as PathWorkplaneCmd
         from Path.Main.Gui import SanityCmd as SanityCmd
+        from Path.Tool.holder import assembly as PathToolHolderAssembly
+        from Path.Tool.holder import ui as PathToolHolderUi
         from Path.Tool.toolbit.ui import cmd as PathToolBitCmd
         from Path.Tool.library.ui import cmd as PathToolBitLibraryCmd
 
@@ -127,7 +129,18 @@ class CAMWorkbench(Workbench):
         # build commands list
         projcmdlist = ["CAM_Job", "CAM_Workplane", "CAM_Sanity"]
         postcmdlist = ["CAM_Post", "CAM_PostSelected"]
-        toolcmdlist = ["CAM_Inspect", "CAM_SelectLoop", "CAM_OpActiveToggle"]
+        toolcmdlist = [
+            "CAM_Inspect",
+            "CAM_SelectLoop",
+            "CAM_OpActiveToggle",
+            "CAM_ToolHolderImport",
+            "CAM_ToolHolderAssetEdit",
+            "CAM_ToolHolderEdit",
+            "CAM_ToolAssemblyPreview",
+            "CAM_AssignToolAssembly",
+            "CAM_ConfigureToolAssembly",
+            "CAM_ToolAssemblyGuide",
+        ]
 
         simcmdlist = ["CAM_SimulatorGL", "CAM_Simulator"]
         prefs = FreeCAD.ParamGet("User parameter:BaseApp/Preferences/Mod/CAM")

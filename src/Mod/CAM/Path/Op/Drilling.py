@@ -48,6 +48,20 @@ else:
 translate = FreeCAD.Qt.translate
 
 
+def _migratePropertyName(obj, old_name, new_name):
+    """Rename a restored property, reconciling documents that contain both names."""
+    if not hasattr(obj, old_name):
+        return False
+    if hasattr(obj, new_name):
+        # The new property may have been created by the current proxy before the
+        # document's legacy property was restored. Keep the saved legacy value.
+        setattr(obj, new_name, getattr(obj, old_name))
+        obj.removeProperty(old_name)
+    else:
+        obj.renameProperty(old_name, new_name)
+    return True
+
+
 class ObjectDrilling(PathCircularHoleBase.ObjectOp):
     """Proxy object for Drilling operation."""
 
@@ -134,9 +148,9 @@ class ObjectDrilling(PathCircularHoleBase.ObjectOp):
         if hasattr(obj, "AddTipLength"):
             obj.removeProperty("AddTipLength")
 
-        if hasattr(obj, "chipBreakEnabled"):
-            obj.renameProperty("chipBreakEnabled", "ChipBreakEnabled")
-        elif not hasattr(obj, "ChipBreakEnabled"):
+        if not _migratePropertyName(obj, "chipBreakEnabled", "ChipBreakEnabled") and not hasattr(
+            obj, "ChipBreakEnabled"
+        ):
             obj.addProperty(
                 "App::PropertyBool",
                 "ChipBreakEnabled",
@@ -148,9 +162,9 @@ class ObjectDrilling(PathCircularHoleBase.ObjectOp):
                 ),
             )
 
-        if hasattr(obj, "feedRetractEnabled"):
-            obj.renameProperty("feedRetractEnabled", "FeedRetractEnabled")
-        elif not hasattr(obj, "FeedRetractEnabled"):
+        if not _migratePropertyName(obj, "feedRetractEnabled", "FeedRetractEnabled") and not hasattr(
+            obj, "FeedRetractEnabled"
+        ):
             obj.addProperty(
                 "App::PropertyBool",
                 "FeedRetractEnabled",
@@ -167,9 +181,9 @@ class ObjectDrilling(PathCircularHoleBase.ObjectOp):
         # which is also loosely "the retract height" but a different, general plane.
         # Handles both: (a) old docs that already have RetractHeight (rename it), and
         # (b) docs saved while the property was missing entirely (add it fresh).
-        if hasattr(obj, "RetractHeight"):
-            obj.renameProperty("RetractHeight", "PeckRetract")
-        elif not hasattr(obj, "PeckRetract"):
+        if not _migratePropertyName(obj, "RetractHeight", "PeckRetract") and not hasattr(
+            obj, "PeckRetract"
+        ):
             obj.addProperty(
                 "App::PropertyDistance",
                 "PeckRetract",

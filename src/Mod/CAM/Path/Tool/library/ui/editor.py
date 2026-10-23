@@ -61,6 +61,7 @@ else:
 
 _LibraryRole = Qt.UserRole + 1
 translate = FreeCAD.Qt.translate
+_modeless_editors = []
 
 
 class LibraryEditor(QWidget):
@@ -280,7 +281,25 @@ class LibraryEditor(QWidget):
 
     def open(self):
         Path.Log.track()
-        return self.form.exec_()
+        # Keep the library browser available without blocking the 3D view. This
+        # is useful for inspecting tool/holder assemblies while assigning them.
+        if self not in _modeless_editors:
+            _modeless_editors.append(self)
+            self.form.finished.connect(self._on_modeless_editor_finished)
+        self.form.setModal(False)
+        self.form.show()
+        self.form.raise_()
+        self.form.activateWindow()
+
+    def _on_modeless_editor_finished(self, _result):
+        try:
+            self.form.finished.disconnect(self._on_modeless_editor_finished)
+        except Exception:
+            pass
+        try:
+            _modeless_editors.remove(self)
+        except ValueError:
+            pass
 
     def _refresh_library_list(self):
         """Clears and repopulates the self.listModel with available libraries."""

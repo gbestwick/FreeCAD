@@ -145,6 +145,33 @@ class ToolController:
             QT_TRANSLATE_NOOP("App::Property", "The active tool"),
         )
         obj.ToolNumber = (0, 0, 10000, 1)
+        # Optional visual tool/holder assembly used by the CAM simulator.
+        # Kept as a link on the controller so the setup follows this tool
+        # wherever the controller is used in a Job.
+        obj.addProperty(
+            "App::PropertyLink",
+            "CAMToolAssembly",
+            "Tool Assembly",
+            QT_TRANSLATE_NOOP(
+                "App::Property",
+                "Optional tool and holder preview assigned to this controller",
+            ),
+        )
+        obj.setEditorMode("CAMToolAssembly", 0)
+        obj.addProperty(
+            "App::PropertyString",
+            "CAMToolAssemblyURI",
+            "Tool Assembly",
+            QT_TRANSLATE_NOOP("App::Property", "Reusable assembly asset reference from the CAM library"),
+        )
+        obj.addProperty(
+            "App::PropertyString",
+            "CAMToolAssemblyLabel",
+            "Tool Assembly",
+            QT_TRANSLATE_NOOP("App::Property", "Name of the assigned reusable tool assembly"),
+        )
+        obj.setEditorMode("CAMToolAssemblyURI", 2)
+        obj.setEditorMode("CAMToolAssemblyLabel", 1)
         obj.addProperty(
             "App::PropertyFloat",
             "SpindleSpeed",
@@ -260,6 +287,22 @@ class ToolController:
 
     def onDocumentRestored(self, obj):
         self.ensureToolBit(obj)
+        if not hasattr(obj, "CAMToolAssembly"):
+            obj.addProperty(
+                "App::PropertyLink",
+                "CAMToolAssembly",
+                "Tool Assembly",
+                QT_TRANSLATE_NOOP(
+                    "App::Property",
+                    "Optional tool and holder preview assigned to this controller",
+                ),
+            )
+        if not hasattr(obj, "CAMToolAssemblyURI"):
+            obj.addProperty("App::PropertyString", "CAMToolAssemblyURI", "Tool Assembly")
+        if not hasattr(obj, "CAMToolAssemblyLabel"):
+            obj.addProperty("App::PropertyString", "CAMToolAssemblyLabel", "Tool Assembly")
+        obj.setEditorMode("CAMToolAssemblyURI", 2)
+        obj.setEditorMode("CAMToolAssemblyLabel", 1)
         if not obj.Tool.Proxy:
             if hasattr(obj.Tool, "ShapeName") or hasattr(obj.Tool, "ShapeType"):
                 # Old tool file; perform migration

@@ -42,6 +42,8 @@
 #include <Gui/View3DInventorViewer.h>
 #include <Inventor/nodes/SoOrthographicCamera.h>
 #include <Inventor/nodes/SoPerspectiveCamera.h>
+#include "CommandsPanel.h"
+#include <QSplitter>
 #include <QPointer>
 #include <QStackedLayout>
 #include <QStackedWidget>
@@ -67,6 +69,7 @@ ViewCAMSimulator::ViewCAMSimulator(Gui::Document* pcDocument, QWidget* parent, Q
     viewCAMSimulator = this;
 
     mDlg = new DlgCAMSimulator;
+    mDlg->setGuiDocument(pcDocument);
     mDlg->setAttribute(Qt::WA_TransparentForMouseEvents);
 
     mGui = new GuiDisplay;
@@ -91,7 +94,20 @@ ViewCAMSimulator::ViewCAMSimulator(Gui::Document* pcDocument, QWidget* parent, Q
 
     stack->addWidget(mDummyViewer);
 
-    setCentralWidget(stack);
+    auto* splitter = new QSplitter(Qt::Horizontal);
+    splitter->setObjectName(QStringLiteral("commandsSplitter"));
+    auto* commands = new CommandsPanel;
+    commands->setObjectName(QStringLiteral("commandsPanel"));
+    splitter->addWidget(stack);
+    splitter->addWidget(commands);
+    splitter->setCollapsible(0, false);
+    splitter->setCollapsible(1, false);
+    splitter->setStretchFactor(0, 1);
+    splitter->setSizes({700, 350});
+    mDlg->connectCommands(*commands);
+    connect(mGui, &GuiDisplay::commandsVisibleChanged, commands, &QWidget::setVisible);
+    connect(commands, &CommandsPanel::closeRequested, this, [this] { mGui->setCommandsVisible(false); });
+    setCentralWidget(splitter);
 
 #else
 
@@ -295,6 +311,12 @@ ViewCAMSimulator* ViewCAMSimulator::clone(Gui::Document* doc)
     viewCam->cloneFrom(*this);
     viewCam->mDlg->cloneFrom(*mDlg);
     viewCam->mDummyViewer->cloneFrom(*mDummyViewer);
+    auto* commands = findChild<CommandsPanel*>();
+    auto* newCommands = viewCam->findChild<CommandsPanel*>();
+    newCommands->setFollowing(commands->isFollowing());
+    viewCam->mGui->setCommandsVisible(!commands->isHidden());
+    viewCam->findChild<QSplitter*>(QStringLiteral("commandsSplitter"))->setSizes(
+        findChild<QSplitter*>(QStringLiteral("commandsSplitter"))->sizes());
 
     // camera
 

@@ -131,6 +131,13 @@ SET(PathPythonTools_SRCS
     Path/Tool/UpdateDocumentTools.py
 )
 
+SET(PathPythonToolsHolder_SRCS
+    Path/Tool/holder/__init__.py
+    Path/Tool/holder/assembly.py
+    Path/Tool/holder/prototype.py
+    Path/Tool/holder/ui.py
+)
+
 SET(PathPythonToolsAssets_SRCS
     Path/Tool/assets/__init__.py
     Path/Tool/assets/asset.py
@@ -783,6 +790,7 @@ SET(all_files
     ${PathPythonPostGui_SRCS}
     ${PathPythonPostScripts_SRCS}
     ${PathPythonTools_SRCS}
+    ${PathPythonToolsHolder_SRCS}
     ${PathPythonToolsAssets_SRCS}
     ${PathPythonToolsMigration_SRCS}
     ${PathPythonToolsAssetsStore_SRCS}
@@ -946,6 +954,13 @@ INSTALL(
         ${PathPythonTools_SRCS}
     DESTINATION
         Mod/CAM/Path/Tool
+)
+
+INSTALL(
+    FILES
+        ${PathPythonToolsHolder_SRCS}
+    DESTINATION
+        Mod/CAM/Path/Tool/holder
 )
 
 INSTALL(

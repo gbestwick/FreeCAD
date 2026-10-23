@@ -45,8 +45,12 @@ class FCTLSerializer(AssetSerializer):
         """Extracts URIs of dependencies from serialized data."""
         data_dict = json.loads(data.decode("utf-8"))
         tools_list = data_dict.get("tools", [])
-        tool_ids = [pathlib.Path(tool["path"]).stem for tool in tools_list]
-        return [AssetUri(f"toolbit://{tool_id}") for tool_id in tool_ids]
+        dependencies = [
+            AssetUri(f"toolbit://{pathlib.Path(tool['path']).stem}")
+            for tool in tools_list
+        ]
+        dependencies.extend(AssetUri(tool["assembly"]) for tool in tools_list if tool.get("assembly"))
+        return dependencies
 
     @classmethod
     def serialize(cls, asset: Asset) -> bytes:
@@ -118,6 +122,8 @@ class FCTLSerializer(AssetSerializer):
                 placeholder_toolbit.label = f"Missing Tool ({tool_id})"
                 library.add_bit(placeholder_toolbit, bit_no=tool_no)
                 Path.Log.info(f"Created placeholder toolbit with original ID {tool_id}")
+            if tool_data.get("assembly"):
+                library.set_assembly_uri(tool_no, tool_data["assembly"])
         return library
 
     @classmethod

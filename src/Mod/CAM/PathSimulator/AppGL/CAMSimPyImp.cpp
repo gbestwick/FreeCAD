@@ -130,6 +130,29 @@ PyObject* CAMSimPy::AddTool(PyObject* args, PyObject* kwds)
     return Py_None;
 }
 
+PyObject* CAMSimPy::AddHolderShape(PyObject* args, PyObject* kwds)
+{
+    static const std::array<const char*, 4> kwlist {"shape", "toolnumber", "resolution", nullptr};
+    PyObject* pObjShape;
+    int toolNumber;
+    float resolution;
+    if (!Base::Wrapped_ParseTupleAndKeywords(
+            args,
+            kwds,
+            "O!if",
+            kwlist,
+            &(Part::TopoShapePy::Type),
+            &pObjShape,
+            &toolNumber,
+            &resolution
+        )) {
+        return nullptr;
+    }
+    const Part::TopoShape& shape = *static_cast<Part::TopoShapePy*>(pObjShape)->getTopoShapePtr();
+    getCAMSimPtr()->AddHolderShape(shape, toolNumber, resolution);
+    Py_RETURN_NONE;
+}
+
 PyObject* CAMSimPy::SetBaseShape(PyObject* args, PyObject* kwds)
 {
     static const std::array<const char*, 3> kwlist {"shape", "resolution", nullptr};
@@ -158,15 +181,28 @@ PyObject* CAMSimPy::SetBaseShape(PyObject* args, PyObject* kwds)
     return Py_None;
 }
 
+PyObject* CAMSimPy::SetOperation(PyObject* args)
+{
+    const char* operation;
+    const char* tool;
+    if (!PyArg_ParseTuple(args, "ss", &operation, &tool)) return nullptr;
+    getCAMSimPtr()->SetOperation(operation, tool);
+    Py_RETURN_NONE;
+}
+
 PyObject* CAMSimPy::AddCommand(PyObject* args)
 {
     PyObject* pObjCmd;
-    if (!PyArg_ParseTuple(args, "O!", &(Path::CommandPy::Type), &pObjCmd)) {
+    double horizontalRapid = -1;
+    double verticalRapid = -1;
+    if (!PyArg_ParseTuple(
+            args, "O!|dd", &(Path::CommandPy::Type), &pObjCmd, &horizontalRapid, &verticalRapid
+        )) {
         return nullptr;
     }
     CAMSim* sim = getCAMSimPtr();
     Path::Command* cmd = static_cast<Path::CommandPy*>(pObjCmd)->getCommandPtr();
-    sim->AddCommand(cmd);
+    sim->AddCommand(cmd, horizontalRapid, verticalRapid);
 
     Py_INCREF(Py_None);
     return Py_None;
